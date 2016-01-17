@@ -8,9 +8,11 @@ import javafx.event.EventHandler;
 import javafx.fxml.FXML;
 import javafx.fxml.Initializable;
 import javafx.scene.control.*;
+import javafx.scene.input.DragEvent;
+import javafx.scene.input.Dragboard;
 import javafx.scene.input.MouseEvent;
+import javafx.scene.input.TransferMode;
 import javafx.scene.text.Text;
-import javafx.util.Callback;
 import javazoom.jl.decoder.JavaLayerException;
 import javazoom.jl.player.Player;
 import org.apache.tika.exception.TikaException;
@@ -37,22 +39,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import javafx.scene.control.ListView;
 
-
-
 public class Controller implements Initializable {
-
-    class Utwor{
-
-        String artist;//data member(also instance variable)
-        String title;
-        String sciezka;
-
-        void dodajUtwor(String n,String k,String l){  //method
-            artist=n;
-            title=k;
-            sciezka=l;
-        }
-    }
 
     FileInputStream FIS;
     BufferedInputStream BIS;
@@ -65,6 +52,8 @@ public class Controller implements Initializable {
     public double moment;
     boolean isMousePressed=false;
     boolean isPaused=false;
+    int selectedItem;
+
     @FXML
     private Button PlayBUT;
     @FXML
@@ -96,10 +85,9 @@ public class Controller implements Initializable {
 
     @FXML
     private void deleteAction(ActionEvent action){
-        int selectedItem = Lista.getSelectionModel().getSelectedIndex();
+        selectedItem = Lista.getSelectionModel().getSelectedIndex();
         listItems.remove(selectedItem);
         songs.remove(selectedItem);
-     //   SongNAME.setText("proba");
     }
     @Override
     public void initialize(URL arg0, ResourceBundle arg1) {
@@ -119,34 +107,8 @@ public class Controller implements Initializable {
             @Override
             public void handle(ActionEvent arg0) {
                 if(isPaused==false) {
-                    int selectedItem = Lista.getSelectionModel().getSelectedIndex();
-                    sciezkaToGo = songs.get(selectedItem).sciezka;
-                    SongNAME.setText(songs.get(selectedItem).artist+"-"+songs.get(selectedItem).title);
-                    try {
-                        if (player != null) {
-                            player.close();
-                        }
-                        FIS = new FileInputStream(sciezkaToGo);
-                        BIS = new BufferedInputStream(FIS);
-                        player = new Player(BIS);
-
-                        dlugoscutworu = FIS.available();
-                    } catch (FileNotFoundException | JavaLayerException ex) {
-                    } catch (IOException ex) {
-                    }
-                    new Thread() {
-                        @Override
-                        public void run() {
-                            try {
-                                player.play();
-                                isPaused=false;
-                                setGlosnosc((float) 0.8);
-                            } catch (JavaLayerException ex) {
-                            }
-                        }
-                    }.start();
+                    Graj();
                 }
-
                 if(isPaused==true) {
                     Wznow();
                 }
@@ -160,55 +122,48 @@ public class Controller implements Initializable {
             }
         });
 
+        Lista.setOnDragOver(new EventHandler<DragEvent>() {
+            @Override
+            public void handle(DragEvent event) {
+                Dragboard db = event.getDragboard();
+                if (db.hasFiles()) {
+                    event.acceptTransferModes(TransferMode.COPY);
+                } else {
+                    event.consume();
+                }
+            }
+        });
+
+        Lista.setOnDragDropped(new EventHandler<DragEvent>() {
+            @Override
+            public void handle(DragEvent event) {
+                Dragboard db = event.getDragboard();
+                boolean success = false;
+                if (db.hasFiles()) {
+                    success = true;
+                    String filePath = null;
+                    for (File file:db.getFiles()) {
+                        filePath = file.getAbsolutePath();
+                        getMeta(filePath);
+                    }
+                }
+                event.setDropCompleted(success);
+                event.consume();
+            }
+        });
+
         OpenBUT.setOnAction(new EventHandler<ActionEvent>() {
             @Override
             public void handle(ActionEvent arg0) {
-                JFileChooser fileChooser = new JFileChooser();
-                fileChooser.setCurrentDirectory(new File(System.getProperty("user.home")));
-                int result = fileChooser.showOpenDialog(null);
-                if (result == JFileChooser.APPROVE_OPTION) {
-                    File selectedFile = fileChooser.getSelectedFile();
-                    sciezkautworu=selectedFile.getAbsolutePath();
-
-                    try
-                    {
-                        if (player != null) {
-                            player.close();
-                        }
-                        FIS=new FileInputStream(sciezkautworu);
-                        BIS=new BufferedInputStream(FIS);
-                        player=new Player(BIS);
-
-                        dlugoscutworu=FIS.available();
-                        sciezkautworu=sciezkautworu + "";
-                        SongNAME.setText("Choose track");
-                        getMeta(sciezkautworu);
-                    }
-                    catch(FileNotFoundException | JavaLayerException ex) {
-                    }
-                    catch(IOException ex) {
-                    }
-                }
+                Open();
             }
         });
 
         PauseBUT.setOnAction(new EventHandler<ActionEvent>() {
             @Override
             public void handle(ActionEvent arg0) {
-                if(player!=null)
-                {
-                    try
-                    {
-                        isPaused=true;
-                        pozostalo=FIS.available();
-                        player.close();
-                    }
-                    catch(IOException ex)
-                    {
-
-                    }
-                }
-            }
+            Pauza();
+           }
         });
 
         DelBUT.setOnAction(new EventHandler<ActionEvent>() {
@@ -218,11 +173,17 @@ public class Controller implements Initializable {
             }
         });
 
+        PreBUT.setOnAction(new EventHandler<ActionEvent>() {
+            @Override
+            public void handle(ActionEvent arg0) {
+                Previous();
+            }
+        });
+
         NextBUT.setOnAction(new EventHandler<ActionEvent>() {
             @Override
             public void handle(ActionEvent arg0) {
-                if(player!=null) {
-                }
+                Next();
             }
         });
 
@@ -236,12 +197,7 @@ public class Controller implements Initializable {
         SliderX.setOnMouseReleased(new EventHandler<MouseEvent>() {
             @Override
             public void handle(MouseEvent mouseEvent) {
-                isMousePressed=false;
-                moment= SliderX.getValue();
-                pozostalo=Math.round(dlugoscutworu-dlugoscutworu*moment/100);
-                if (player != null) {
-                    player.close();
-                }
+                getMoment();
                 Wznow();
             }
         });
@@ -249,42 +205,61 @@ public class Controller implements Initializable {
         SliderVol.setOnMouseDragged(new EventHandler<MouseEvent>() {
             @Override
             public void handle(MouseEvent mouseEvent) {
-                double ctrl=SliderVol.getValue();
-                float ctrlctrl=(float)(ctrl*ctrl);
-                setGlosnosc(ctrlctrl);
+                setGlosnosc();
             }
         });
 
         SliderVol.setOnMouseReleased(new EventHandler<MouseEvent>() {
             @Override
             public void handle(MouseEvent mouseEvent) {
-                double ctrl=SliderVol.getValue();
-                float ctrlctrl=(float)(ctrl*ctrl);
-                setGlosnosc(ctrlctrl);
+                setGlosnosc();
             }
         });
 
         Runnable slidUpdate = new Runnable() {
             public void run() {
-
-                if(player!=null)
-                {
-                    if(isMousePressed!=true) {
-
-                        try {
-                            pozostalo = FIS.available();
-                            moment = ((double) (dlugoscutworu - pozostalo)) * 100 / dlugoscutworu;
-                            SliderX.setValue(moment);
-                        } catch (IOException ex) {
-
-                        }
-                    }
-                }
+                Apdejt();
             }
         };
         ScheduledExecutorService executor = Executors.newScheduledThreadPool(1);
         executor.scheduleAtFixedRate(slidUpdate, 0, 1, TimeUnit.SECONDS);
+    }
 
+    void Open() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setCurrentDirectory(new File(System.getProperty("user.home")));
+        int result = fileChooser.showOpenDialog(null);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File selectedFile = fileChooser.getSelectedFile();
+            sciezkautworu = selectedFile.getAbsolutePath();
+            getMeta(sciezkautworu);
+        }
+    }
+
+    void Apdejt()
+    {
+        if (isPaused != true){
+            if (player != null) {
+                if (isMousePressed != true) {
+                    try {
+                        pozostalo = FIS.available();
+                        moment = ((double) (dlugoscutworu - pozostalo)) * 100 / dlugoscutworu;
+                        SliderX.setValue(moment);
+                    } catch (IOException ex) {
+
+                    }
+                }
+            }
+        }
+    }
+
+    void getMoment(){
+        isMousePressed=false;
+        moment= SliderX.getValue();
+        pozostalo=Math.round(dlugoscutworu-dlugoscutworu*moment/100);
+        if (player != null) {
+            player.close();
+        }
     }
 
     void Stop() {
@@ -296,9 +271,50 @@ public class Controller implements Initializable {
         }
     }
 
+    void Graj() {
+        selectedItem = Lista.getSelectionModel().getSelectedIndex();
+        sciezkaToGo = songs.get(selectedItem).sciezka;
+        SongNAME.setText(songs.get(selectedItem).artist + "-" + songs.get(selectedItem).title);
+        try {
+            if (player != null) {
+                player.close();
+            }
+            FIS = new FileInputStream(sciezkaToGo);
+            BIS = new BufferedInputStream(FIS);
+            player = new Player(BIS);
+
+            dlugoscutworu = FIS.available();
+        }
+        catch (FileNotFoundException | JavaLayerException ex) {
+        }
+        catch (IOException ex) {
+        }
+        new Thread() {
+            @Override
+            public void run() {
+                try {
+                    player.play();
+                    setGlosnosc();
+                } catch (JavaLayerException ex) {
+                }
+            }
+
+        }.start();
+        isPaused = false;
+    }
+
+    void Pauza(){
+        try {
+            pozostalo=FIS.available();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        isPaused=true;
+        player.close();
+    }
+
     void Wznow() {
         try {
-            isPaused=false;
             FIS=new FileInputStream(sciezkaToGo);
             FIS.skip(dlugoscutworu-pozostalo);
             BIS=new BufferedInputStream(FIS);
@@ -319,10 +335,30 @@ public class Controller implements Initializable {
                 }
             }
         }.start();
+        isPaused=false;
     }
 
-    void setGlosnosc(float vol)
+    void Previous() {
+        if (selectedItem > 0) {
+            selectedItem = selectedItem - 1;
+            Lista.getSelectionModel().select(selectedItem);
+            Graj();
+        }
+    }
+
+    void Next() {
+        if (selectedItem < (songs.size() - 1)) {
+            selectedItem = selectedItem + 1;
+            Lista.getSelectionModel().select(selectedItem);
+            Graj();
+        }
+    }
+
+
+    void setGlosnosc()
     {
+        double vo=SliderVol.getValue();
+        float vol=(float)(vo*vo);
         try {
             Mixer.Info[] infos = AudioSystem.getMixerInfo();
             for (Mixer.Info info: infos)
@@ -348,32 +384,13 @@ public class Controller implements Initializable {
     void getMeta(String path)
     {
         try {
-
             InputStream input = new FileInputStream(new File(path));
             ContentHandler handler = new DefaultHandler();
             Metadata metadata = new Metadata();
             Parser parser = new Mp3Parser();
             ParseContext parseCtx = new ParseContext();
             parser.parse(input, handler, metadata, parseCtx);
-            //         fis.close();
 
-            // List all metadata
-            String[] metadataNames = metadata.names();
-
-            for(String name : metadataNames){
-                System.out.println(name + ": " + metadata.get(name));
-            }
-
-            // Retrieve the necessary info from metadata
-            // Names - title, xmpDM:artist etc. - mentioned below may differ based
-            System.out.println("----------------------------------------------");
-            System.out.println("Title: " + metadata.get("title"));
-            System.out.println("Artists: " + metadata.get("xmpDM:artist"));
-            System.out.println("Composer : "+metadata.get("xmpDM:composer"));
-            System.out.println("Genre : "+metadata.get("xmpDM:genre"));
-            System.out.println("Album : "+metadata.get("xmpDM:album"));
-
-            //  addAction(metadata.get("title"));
             Utwor s1=new Utwor();
             s1.dodajUtwor(metadata.get("xmpDM:artist"),metadata.get("title"),path);
             addAction(s1);
@@ -389,6 +406,4 @@ public class Controller implements Initializable {
             e.printStackTrace();
         }
     }
-
-
 }
