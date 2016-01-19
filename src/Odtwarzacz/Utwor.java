@@ -8,10 +8,12 @@ public class Utwor{
     String artist;
     String title;
     String sciezka;
+    long dlugosc;
 
-    void dodajUtwor(String n,String k,String l){
+    void utworzUtwor(String n,String k,String l, long dlug){
         artist=n;
         title=k;
         sciezka=l;
+        dlugosc=dlug;
     }
 }
