@@ -97,8 +97,21 @@ public class Odtwarzacz {
         }
     }
 
+    float obliczGlosnosc(double vo) {
+        float vol = 0;
+        if (vo>0) {
+            vol = (float) (vo * vo);
+        }
+        if (vo<=0){
+            vol=0;
+        }
+        if (vo>=1){
+            vol=1;
+        }
+        return vol;
+    }
+
     void setGlosnosc(double vo) {
-        float vol=(float)(vo*vo);
         try {
             Mixer.Info[] infos = AudioSystem.getMixerInfo();
             for (Mixer.Info info: infos)
@@ -111,7 +124,7 @@ public class Odtwarzacz {
                     if (port.isControlSupported(FloatControl.Type.VOLUME))
                     {
                         FloatControl volume =  (FloatControl)port.getControl(FloatControl.Type.VOLUME);
-                        volume.setValue(vol);
+                        volume.setValue(obliczGlosnosc(vo));
                     }
                     port.close();
                 }

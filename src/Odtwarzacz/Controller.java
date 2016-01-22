@@ -208,7 +208,11 @@ public class Controller implements Initializable {
         Runnable slidUpdate = new Runnable() {
             public void run() {
                 if(!isMousePressed) {
-                        SliderX.setValue(odtwarzacz.Apdejt());
+                    if (!odtwarzacz.isPaused){
+                        if (odtwarzacz.player != null) {
+                            SliderX.setValue(odtwarzacz.Apdejt());
+                        }
+                    }
                 }
             }
         };
